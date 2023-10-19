@@ -1,4 +1,3 @@
-import { add_subject } from '../models/subjects';
 import UserModel from '../models/userModel';
 import UserModel2 from '../models/userModel2';
 
@@ -10,8 +9,6 @@ export async function findSubjectDB(format: string, id: string) {
         
     //Subject found
     if (subject) {
-      //add subject to internal structure
-      add_subject(subject.id, "enabled");
       return true;
     } 
 
@@ -31,13 +28,11 @@ export async function findSubjectDB(format: string, id: string) {
 
 export async function findSubjectDB_2(format: string, iss: string, id: string) {
     try {
-      //Find subject in the DB using the usermodel
+      //Find subject in the DB using the usermodel2
       const subject = await UserModel2.findOne({ format: format, iss: iss, id: id });
         
       //Subject found
       if (subject) {
-        //add subject to internal structure
-        add_subject(subject.id, "enabled");
         return true;
       } 
       //Subject not found

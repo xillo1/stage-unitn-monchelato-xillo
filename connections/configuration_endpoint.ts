@@ -1,76 +1,126 @@
 //This is the configuration endpoint used to read, update or delete the configuration of the stream.
 
 import { Request, Response } from 'express';
-import { setStatus } from './status_endpoint';
-import { sharedState } from '../models/sharedState';
-import { conf_verification_post } from '../functions/configuration_verification';
+import {Client_config, deleteClientConfig, get_config, update_config} from '../models/sharedConfig';
 
-
+//This is the list of events supported, we will 
 const events_supported = [
-  "http://localhost/account-credential-change-required",
-  "http://localhost/account-purged",
-  "http://localhost/account-disabled",
-  "http://localhost/account-enabled",
-  "http://localhost/identifier-changed",
-  "http://localhost/identifier-recycled",
-  "http://localhost/credential-compromised",  
-  "http://localhost/opt-in",
-  "http://localhost/opt-out-initiated",
-  "http://localhost/opt-out-cancelled",
-  "http://localhost/opt-out-effective",
-  "http://localhost/recovery-activated",
-  "http://localhost/recovery-information_changed",
-  "http://localhost/session-revoked",];
+  "https://schemas.openid.net/secevent/risc/event-type/account-credential-change-required",
+  "https://schemas.openid.net/secevent/risc/event-type/account-purged",
+  "https://schemas.openid.net/secevent/risc/event-type/account-disabled",
+  "https://schemas.openid.net/secevent/risc/event-type/account-enabled",
+  "https://schemas.openid.net/secevent/risc/event-type/identifier-changed",
+  "https://schemas.openid.net/secevent/risc/event-type/identifier-recycled",
+  "https://schemas.openid.net/secevent/risc/event-type/credential-compromise",  
+  "https://schemas.openid.net/secevent/risc/event-type/opt-in",
+  "https://schemas.openid.net/secevent/risc/event-type/opt-out-initiated",
+  "https://schemas.openid.net/secevent/risc/event-type/opt-out-cancelled",
+  "https://schemas.openid.net/secevent/risc/event-type/opt-out-effective",
+  "https://schemas.openid.net/secevent/risc/event-type/recovery-activated",
+  "https://schemas.openid.net/secevent/risc/event-type/recovery-information-changed",
+  "https://schemas.openid.net/secevent/risc/event-type/sessions-revoked",];
 
-let events_requested = "";
-let events_delivered = [""]; 
-let endpoint_delivery_url = "";
-let delivery = "";
-let delivery_method = "";
+  let clientConfig: Client_config = {
+    client_id: "",
+    events_requested: [],
+    events_delivered: [], 
+    endpoint_delivery_url: "", 
+    delivery: "",
+    delivery_method: "",
+    aud: [],
+    status:"disabled",
+    events:[],
+    index:0,
+};
 
 
-
-//This endpoint is to update the stream configuration (POST)
+//This endpoint is to update the stream configurat   (POST request)
 export function updateConfiguration(req: Request, res: Response) {
+  //This function return true is the fields 'iss' and 'aud' are present, false otherwise
   if(conf_verification_post(req,res))
-  {
-      //Saving the audience of the message
-      const aud = req.body.aud;    
-    
-      //Saving the delivery method chosen (in lastpart) 
-      delivery = req.body.delivery; 
-      delivery_method = req.body.delivery.delivery_method;
-      const parts = delivery_method.split('/');
-      endpoint_delivery_url = req.body.delivery.url + parts[parts.length - 1];
-    
-      //Saving the events requested from client
-      events_requested =  req.body.events_requested;
+  {    
+    clientConfig.aud = req.body.aud;
+    //If delivery is present and not null we save the informations, else: Missing properties SHOULD be interpreted as requested to be deleted
+    if(req.body.hasOwnProperty('delivery') && req.body.delivery !== undefined){
+      clientConfig.delivery = req.body.delivery; 
+      //If delivery field is present there has to be the following two fields
+      if(req.body.delivery.hasOwnProperty('delivery_method') && req.body.delivery.delivery_method !== undefined && req.body.delivery.hasOwnProperty('url') &&  req.body.delivery.url !== undefined){
+        const dlv_mth = req.body.delivery.delivery_method;
+        const parts = dlv_mth.split('/');
+        const method = parts[parts.length -1];
+        if(method !== "push" && method !=="pull")
+        {
+          res.status(200).json({error: "Delivery method not supported"});
+          return;
+        }
+        clientConfig.delivery_method=method;
+        clientConfig.endpoint_delivery_url = req.body.delivery.url;
+      }
+      else
+      {
+        res.status(400).json({error: 'delivery field set up incorrectly'});
+        return;
+      }
+    }
+    else{
+      clientConfig.delivery = "";
+      clientConfig.delivery_method="";
+      clientConfig.endpoint_delivery_url="";
+    }
 
-      //Filtering events supported and requested
-      events_delivered = events_supported.filter(event => events_requested.includes(event));
+    //If events_requested is present and not null we save the informations, else: Missing properties SHOULD be interpreted as requested to be deleted
+    if(req.body.hasOwnProperty('events_requested') && req.body.events_requested !== undefined){
+      clientConfig.events_requested =  req.body.events_requested;
+    }
+    else{
+      clientConfig.events_requested=[""];
+    }
 
-      //(OPTIONAL) Saving format client wants for subject
-      const format = req.body.format;
+    //Filtering events supported and requested
+    clientConfig.events_delivered = events_supported.filter(event => clientConfig.events_requested.includes(event));
+
+    //(OPTIONAL) Saving format client wants for subject
+    const format = req.body.format;
+    clientConfig.status = "enabled";
+    update_config(req.body.sub, clientConfig);
 
       //Set up the header 
       res.setHeader('Content-Type', 'application/json');
-      
-      //Send response to client with 200 OK
-      res.status(200).json({
-        "iss":
-          req.body.iss,
-        "aud": 
-          aud,
-        "delivery": {
-          "url": endpoint_delivery_url,
-          delivery_method
-        },
-          events_supported,
-          events_requested,
-          events_delivered,
-          format,
-      });
-    setStatus("enabled");
+      if(clientConfig.delivery_method === "push")
+      {
+        //Send response to client with 200 OK
+        res.status(200).json({
+          "iss":
+            "localhost/server",
+          "aud": 
+            clientConfig.aud,
+          "delivery": {
+            "url": clientConfig.endpoint_delivery_url,
+            "delivery_method": clientConfig.delivery_method,
+          },
+            events_supported,
+            "events_requested": clientConfig.events_requested,
+            "events_delivered": clientConfig.events_delivered,
+            format,
+        });
+      }
+      else if(clientConfig.delivery_method === "pull"){
+        //Send response to client with 200 OK
+        res.status(200).json({
+          "iss":
+            "localhost/server",
+          "aud": 
+            clientConfig.aud,
+          "delivery": {
+            "url": "http://127.0.0.1/events_pull",
+            "delivery_method": clientConfig.delivery_method,
+          },
+            events_supported,
+            "events_requested": clientConfig.events_requested,
+            "events_delivered": clientConfig.events_delivered,
+            format,
+        });
+      }
   }
 }
 
@@ -80,44 +130,65 @@ export function updateConfiguration(req: Request, res: Response) {
 
 //This endpoint is to read the stream configuration
 export function getConfiguration(req: Request, res: Response) {
-  //Take the decoded JWT and save it 
-  const jwtPayload = sharedState.jwtPayload;
-
-  if(sharedState.jwtPayload.hasOwnProperty('iss') && sharedState.jwtPayload.iss !== undefined)
+  const config = get_config(req.body.sub)
+  if(config !== undefined)
   {
-    if(sharedState.jwtPayload.hasOwnProperty('aud') && sharedState.jwtPayload.aud !== undefined)
-    {   
       //Set up the header 
       res.setHeader('Content-Type', 'application/json');
 
       res.status(200).json({
         "iss":
-          jwtPayload.iss,
+          "localhost/server",
         "aud": [
-          jwtPayload.aud,
+          clientConfig.aud,
         ],
         "delivery": {
-          "url": endpoint_delivery_url,
-          delivery_method,
+          "url": config.endpoint_delivery_url,
+          "delivery_method": config.delivery_method,
         },
           events_supported,
-          events_requested,
-          events_delivered,
+          "events_requested": clientConfig.events_requested,
+          "events_delivered": clientConfig.events_delivered,
       });
-    }
-    else{res.status(400).json({error : 'aud field not found or empty'}); }
+  } 
+  else{
+    res.setHeader('Content-Type', 'application/json');
+    res.status(400).json({error: "Stream not configured"});
   }
-  else{res.status(400).json({error : 'iss field not found or empty'});}
-    
 }
   
 
 //This endpoint is to delete the stream configuration
 export function deleteConfiguration(req: Request, res: Response) {
-  events_requested = "";
-  events_delivered = [""];
-  endpoint_delivery_url = "";
-  delivery = "";
-  res.status(200).send();
-  setStatus("disabled");  
+  if(deleteClientConfig(req.body.sub)){
+    res.sendStatus(200);
+  }
+  else
+  {
+    res.status(403).json({error: 'Configuration not deleted, no configuration found for: ${req.body.sub}'});
+  }
+}
+
+
+function conf_verification_post( req:Request, res:Response ): boolean
+{
+    //Try access body of request
+    const reqbody = req.body;
+    if (!reqbody) {
+      //If the body cannot be analyzed return false and send an error
+      res.status(400).json({ error: 'Request not valid' });
+      return false;
+    } 
+
+    //Check if the request body has all the information needed in the update_configuration endpoint to work, the fields necessasry are 'iss' and 'aud'
+    if(req.body.hasOwnProperty('iss') && req.body.iss !== undefined){
+        
+        if(req.body.hasOwnProperty('aud') && req.body.aud !== undefined){
+            return true;
+        }
+        res.status(400).json({error: 'aud field not found or epmty'});
+        return false;
+    }
+    res.status(400).json({error: 'iss field not found or empty'});
+    return false;
 }

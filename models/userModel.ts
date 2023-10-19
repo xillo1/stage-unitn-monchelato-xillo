@@ -13,3 +13,4 @@ const userSchema = new Schema<Simple_Subject>({
 const UserModel = mongoose.model<Simple_Subject>('User', userSchema);
 
 export default UserModel;
+
