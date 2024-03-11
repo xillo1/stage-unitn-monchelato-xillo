@@ -1,0 +1,40 @@
+Account credential change required: indicates that the account identified by the subject was required to change a credential
+Action:  Nothing (If the credential will indeed change it will be specified in an CAEP event)
+
+Account Purged: indicates that the account identified by the subject has been permanently deleted
+Action: Remove the account from the database(server side) and close all session relative to that account
+
+Account disabled: indicates that the account identified by the subject has been disabled.
+Action: Close all session relative to that account, block access until enabled again
+
+Account enabled: indicates that the account identified by the subject has been enabled.
+Action: If the access was disabled we remove the block, otherwise nothing
+
+Identifier changed: This event indicates that an email or phone identifier has changed.
+Action: Change the id in the database(server side)
+
+Identifier recycled: indicates that an email or phone identifier has been recycled and now belongs to a new user.
+Action: Change the id in the database(server side)
+
+Credential compromised: indicates that the identifier specified in the subject was found to be compromised.
+Action: Close all open session, block access to that account, send a Credential Change Required
+
+Opt in: indicates that the account identified by the subject opted into RISC event exchanges. 
+Action: ?
+
+Opt out intiated: indicates that the account identified by the subject initiated to opt out from RISC event exchanges
+Action: Nothing
+
+Opt iut cancelled: indicates that the account identified by the subject cancelled the opt out from RISC event exchanges
+Action: Nothing
+
+Opt out effective: indicates that the account identified by the subject was effectively opted out from RISC event exchanges.
+Action: Remove from RISC stream (server side)
+
+Recovery activated: indicates that the account identified by the subject activated a recovery flow.
+Action: Form to retrive username/password, eventual credential change required.
+
+Recovery information changed: indicates that the account identified by the subject has changed some of its recovery information.
+Action: Update recovery information (server side)
+
+
